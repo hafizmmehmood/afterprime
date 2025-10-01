@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
       "cdn.afterprime.com",
     ],
   },
+  reactStrictMode: true,
 };
 
 export default nextConfig;

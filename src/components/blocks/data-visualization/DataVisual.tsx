@@ -1,8 +1,12 @@
 "use client";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import Chart, { Plugin, PointElement } from "chart.js/auto";
 import styles from "./style.module.scss";
 import Button from "@/components/ui/Button";
+import { Blocks } from "@/types/blocks";
+
+type SectionProps = Blocks["section-datavisualization"];
 
 type BrokerApiData = {
   broker: string;
@@ -26,7 +30,12 @@ const USD = (v: number) =>
     maximumFractionDigits: 0,
   });
 
-export default function DataVisual() {
+export default function DataVisual(props: SectionProps) {
+  const {
+    data_visialization_section_section_title,
+    data_visialization_section_paragraph,
+  } = props;
+
   // Inputs
   const [start, setStart] = useState(100_000);
   const [lots, setLots] = useState(100);
@@ -47,27 +56,39 @@ export default function DataVisual() {
   const [brokerData, setBrokerData] = useState<Record<string, BrokerApiData>>(
     {}
   );
+  const [COSTS, setCOSTS] = useState<Record<string, number>>({}); // dynamic costs
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartRef = useRef<Chart<"line", number[], number> | null>(null);
 
-  // Fetch broker costs dynamically
+  // Fetch broker costs dynamically and generate COSTS
   useEffect(() => {
     fetch(
-      "https://scoreboard.argamon.com:8443/api/costs/comparison?period=7d&symbols=All%20pairs&mode=24h&commission=true"
+      "https://scoreboard.argamon.com:8443/api/costs/comparison?period=7d&symbols=All%20pairs&mode=day&commission=true"
     )
       .then((res) => res.json())
       .then((res) => {
-        const map: Record<string, BrokerApiData> = {};
+        const dynamicCosts: Record<string, number> = {};
         res.brokers.forEach((b: BrokerApiData) => {
-          map[b.broker] = b;
+          dynamicCosts[b.broker] = b.costPerLot; // broker name → cost per lot
         });
+
+        // Add fixed ones if not in API
+        dynamicCosts["Top 10"] = 10.2;
+        dynamicCosts["Industry Average"] = 18.4;
+
+        setCOSTS(dynamicCosts);
+
+        // Optional: keep brokerData for other uses
+        const map: Record<string, BrokerApiData> = {};
+        res.brokers.forEach((b: BrokerApiData) => (map[b.broker] = b));
         setBrokerData(map);
       })
       .catch(console.error);
   }, []);
 
   const optionsList = useMemo(() => {
-    const allBrokers = Object.keys(brokerData).sort();
+    const allBrokers = Object.keys(COSTS).sort();
     return [
       "Industry Average",
       "Top 10",
@@ -75,7 +96,7 @@ export default function DataVisual() {
       "Afterprime",
       ...allBrokers,
     ];
-  }, [brokerData]);
+  }, [COSTS]);
 
   const RightLabels = useMemo<Plugin<"line">>(
     () => ({
@@ -137,7 +158,7 @@ export default function DataVisual() {
     const seriesDefs: Array<{ label: string; color: string; c: number }> = [];
 
     ["Afterprime", "Industry Average"].forEach((label) => {
-      const cost = brokerData[label]?.costPerLot ?? 0;
+      const cost = COSTS[label] ?? 0;
       seriesDefs.push({
         label,
         color: BROKER_COLORS[label] ?? "#ef4444",
@@ -148,7 +169,7 @@ export default function DataVisual() {
     picks.forEach((bk, idx) => {
       if (!bk || bk === "—DIVIDER—") return;
       if (seriesDefs.some((s) => s.label === bk)) return;
-      const cost = brokerData[bk]?.costPerLot;
+      const cost = COSTS[bk];
       if (typeof cost !== "number") return;
       seriesDefs.push({
         label: bk,
@@ -172,7 +193,7 @@ export default function DataVisual() {
   }
 
   function drawChart() {
-    if (!Object.keys(brokerData).length) return;
+    if (!Object.keys(COSTS).length) return; // wait for API
     const calc = computeSeries();
 
     const ap =
@@ -248,7 +269,7 @@ export default function DataVisual() {
 
   useEffect(() => {
     drawChart();
-  }, [brokerData, start, lots, retPct, months, b1, b2, b3]);
+  }, [COSTS, start, lots, retPct, months, b1, b2, b3]);
   useEffect(() => () => chartRef.current?.destroy(), []);
 
   const reset = () => {
@@ -266,10 +287,12 @@ export default function DataVisual() {
       <div className="grainy_bg"></div>
       <div className="ap_container">
         <div className={styles.costAdvantageSection}>
-          <h2 className="h2-size font-semibold">Cost Visualization</h2>
+          <h2 className="h2-size font-semibold">
+            {data_visialization_section_section_title}
+          </h2>
           <div className="flex items-end justify-between">
             <p className="paragraph max-w-[800px]">
-              Compare brokers dynamically.
+              {data_visialization_section_paragraph}
             </p>
             <Button varient="secondary" size="small" onclick={reset}>
               Reset

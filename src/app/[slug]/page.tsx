@@ -5,11 +5,14 @@ import PageRenderer from "@/components/PageRender";
 
 type Props = { params: { slug: string } };
 
-// Mark this async because we await inside
-export default async function DynamicPage({ params }: Props) {
-  // ✅ params is synchronous here, just use it
-  const slug = params.slug;
+// ✅ Allow runtime slugs
+export const dynamicParams = true;
 
+// ✅ Revalidate every 60s (ISR)
+export const revalidate = 60;
+
+export default async function DynamicPage({ params }: Props) {
+  const slug = params.slug;
   const pages = await wpFetch<WPPage[]>(`/pages?slug=${slug}`);
   const pageData = pages?.[0];
 
@@ -20,11 +23,13 @@ export default async function DynamicPage({ params }: Props) {
   return <PageRenderer pageData={pageData} />;
 }
 
-// generateStaticParams is for SSG, Next.js expects an array of { slug }
+// ✅ Pre-generate slugs for better performance
 export async function generateStaticParams() {
-  const pages = (await wpFetch<WPPage[]>(`/pages?_fields=slug`)) ?? [];
-
-  return pages.map((p) => ({
-    slug: p.slug,
-  }));
+  try {
+    const pages = (await wpFetch<WPPage[]>(`/pages?_fields=slug`)) ?? [];
+    return pages.map((p) => ({ slug: p.slug }));
+  } catch {
+    // If fetch fails at build → still allow runtime rendering
+    return [];
+  }
 }
